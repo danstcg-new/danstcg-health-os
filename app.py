@@ -33,12 +33,12 @@ with st.sidebar:
 if page == "📝 Daily Log":
     st.header("Daily Data Entry")
     
-    # A. Date Selection (Crucial for historic back-filling)
+    # A. Date Selection
     col_date, col_select = st.columns([1, 2])
     with col_date:
         entry_date = st.date_input("Date of Entry", datetime.date.today())
     
-    # B. The Metric Selector (This controls what inputs appear)
+    # B. The Metric Selector
     with col_select:
         data_sources = st.multiselect(
             "Select data to log today:",
@@ -50,7 +50,7 @@ if page == "📝 Daily Log":
 
     # C. The Form
     with st.form("dynamic_log_form"):
-        # Initialize variables as None (so we know if they were skipped)
+        # Initialize variables as None
         weight = body_fat = muscle = visceral = bone = water = protein = bmr = metabolic_age = None
         sleep_score = resting_hr = body_battery_high = body_battery_low = steps = None
         cal_active = cal_resting = None
@@ -100,4 +100,54 @@ if page == "📝 Daily Log":
             with s2:
                 notes = st.text_area("📝 Notes (Triggers, Meds, Mood)")
 
-        # ---
+        # --- SUBMIT BUTTON (CRITICAL: Must be aligned with the IF statements, NOT inside them) ---
+        st.markdown("---")
+        submitted = st.form_submit_button("💾 Save Selected Data", type="primary")
+
+        if submitted:
+            # 1. Build the "Daily Logs" Payload
+            daily_payload = {"date": str(entry_date)}
+            
+            if "⚖️ Scale (Renpho)" in data_sources and weight > 0:
+                daily_payload["weight_kg"] = weight
+            
+            if "🧠 Symptoms & Notes" in data_sources:
+                daily_payload["gout_pain_level"] = gout_pain
+                daily_payload["stress_level"] = anxiety
+                if notes: daily_payload["notes"] = notes
+                if sleep_score and sleep_score > 0: daily_payload["sleep_score"] = sleep_score
+
+            # 2. Build the "Biometrics" Payload
+            bio_payload = {"date": str(entry_date)}
+            
+            if "⚖️ Scale (Renpho)" in data_sources:
+                if body_fat > 0: bio_payload["body_fat_percent"] = body_fat
+                if muscle > 0: bio_payload["muscle_mass_kg"] = muscle
+                if visceral > 0: bio_payload["visceral_fat"] = visceral
+                if bone > 0: bio_payload["bone_mass_kg"] = bone
+                if water > 0: bio_payload["water_kg"] = water
+                if metabolic_age > 0: bio_payload["metabolic_age"] = metabolic_age
+                if protein > 0: bio_payload["protein_kg"] = protein
+                if bmr > 0: bio_payload["bmr"] = bmr
+
+            if "⌚ Watch (Garmin)" in data_sources:
+                if resting_hr > 0: bio_payload["resting_hr"] = resting_hr
+                if steps > 0: bio_payload["steps"] = steps
+                if body_battery_high > 0: bio_payload["body_battery_high"] = body_battery_high
+                if body_battery_low > 0: bio_payload["body_battery_low"] = body_battery_low
+                if cal_active > 0: bio_payload["calories_active"] = cal_active
+                if cal_resting > 0: bio_payload["calories_resting"] = cal_resting
+
+            try:
+                # Upsert Daily Log
+                if len(daily_payload) > 1:
+                    supabase.table("daily_logs").upsert(daily_payload).execute()
+                
+                # Upsert Biometrics
+                if len(bio_payload) > 1:
+                    supabase.table("biometrics").upsert(bio_payload).execute()
+
+                st.success(f"✅ Data saved for {entry_date.strftime('%d %B')}!")
+                
+            except Exception as e:
+                st.error(f"Error saving to database: {e}")
